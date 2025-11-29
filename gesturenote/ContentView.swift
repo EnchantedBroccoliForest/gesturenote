@@ -2,7 +2,6 @@ import SwiftUI
 import AVFoundation
 import Vision
 internal import Combine
-internal import Combine
 
 // MARK: - Main View
 struct ContentView: View {
@@ -210,44 +209,47 @@ class ScrollController: NSObject, ObservableObject, AVCaptureVideoDataOutputSamp
     }
     
     private func setupCamera() {
-        captureSession.beginConfiguration()
-        
-        // Use front camera
-        guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front) else {
-            errorMessage = "Front camera not available"
-            captureSession.commitConfiguration()
-            return
-        }
-        
-        guard let input = try? AVCaptureDeviceInput(device: device) else {
-            errorMessage = "Failed to create camera input"
-            captureSession.commitConfiguration()
-            return
-        }
-        
-        if captureSession.canAddInput(input) {
-            captureSession.addInput(input)
-        } else {
-            errorMessage = "Cannot add camera input to session"
-            captureSession.commitConfiguration()
-            return
-        }
-        
-        // Output setup
-        videoOutput.setSampleBufferDelegate(self, queue: DispatchQueue(label: "videoQueue"))
-        if captureSession.canAddOutput(videoOutput) {
-            captureSession.addOutput(videoOutput)
-        } else {
-            errorMessage = "Cannot add video output to session"
-            captureSession.commitConfiguration()
-            return
-        }
-        
-        captureSession.commitConfiguration()
-        
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
-            self.captureSession.startRunning()
+            
+            self.captureSession.beginConfiguration()
+            
+            // Use front camera
+            guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front) else {
+                DispatchQueue.main.async { self.errorMessage = "Front camera not available" }
+                self.captureSession.commitConfiguration()
+                return
+            }
+            
+            guard let input = try? AVCaptureDeviceInput(device: device) else {
+                DispatchQueue.main.async { self.errorMessage = "Failed to create camera input" }
+                self.captureSession.commitConfiguration()
+                return
+            }
+            
+            if self.captureSession.canAddInput(input) {
+                self.captureSession.addInput(input)
+            } else {
+                DispatchQueue.main.async { self.errorMessage = "Cannot add camera input to session" }
+                self.captureSession.commitConfiguration()
+                return
+            }
+            
+            // Output setup
+            self.videoOutput.setSampleBufferDelegate(self, queue: DispatchQueue(label: "videoQueue"))
+            if self.captureSession.canAddOutput(self.videoOutput) {
+                self.captureSession.addOutput(self.videoOutput)
+            } else {
+                DispatchQueue.main.async { self.errorMessage = "Cannot add video output to session" }
+                self.captureSession.commitConfiguration()
+                return
+            }
+            
+            self.captureSession.commitConfiguration()
+            
+            if !self.captureSession.isRunning {
+                self.captureSession.startRunning()
+            }
         }
     }
     
@@ -335,6 +337,7 @@ struct ScrollableTextView: UIViewRepresentable {
         textView.isEditable = true
         textView.font = UIFont.systemFont(ofSize: 18)
         textView.text = text
+        textView.delegate = context.coordinator
         
         // Store reference to textView in coordinator for timer updates
         context.coordinator.textView = textView
@@ -361,6 +364,7 @@ struct ScrollableTextView: UIViewRepresentable {
         }
         context.coordinator.currentScrollSpeed = scrollSpeed
         context.coordinator.textView = uiView
+        context.coordinator.parent = self
     }
     
     static func dismantleUIView(_ uiView: UITextView, coordinator: Coordinator) {
@@ -369,17 +373,26 @@ struct ScrollableTextView: UIViewRepresentable {
     }
     
     func makeCoordinator() -> Coordinator {
-        Coordinator()
+        Coordinator(parent: self)
     }
     
-    class Coordinator: NSObject {
+    class Coordinator: NSObject, UITextViewDelegate {
+        var parent: ScrollableTextView
         var currentScrollSpeed: CGFloat = 0.0
         var scrollTimer: Timer?
         weak var textView: UITextView?
         
+        init(parent: ScrollableTextView) {
+            self.parent = parent
+        }
+        
         func invalidateTimer() {
             scrollTimer?.invalidate()
             scrollTimer = nil
+        }
+        
+        func textViewDidChange(_ textView: UITextView) {
+            parent.text = textView.text
         }
         
         func updateScrollPosition(textView: UITextView) {
