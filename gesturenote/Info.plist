@@ -6,5 +6,7 @@
 	<array>
 		<string>remote-notification</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>We need access to your camera to detect hand gestures for scrolling.</string>
 </dict>
 </plist>
